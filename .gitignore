@@ -1,0 +1,16 @@
+# This repo holds pipeline code only -- the mesh/fiber data files it
+# operates on are large (hundreds of MB to multi-GB) and don't belong in
+# git. Keep data alongside the repo locally, or distribute it separately.
+*.vtu
+*.vtp
+*.msh
+*.mesh
+*.sol
+*.ply
+*.txt
+!requirements.txt
+
+__pycache__/
+*.pyc
+.DS_Store
+*.asv
