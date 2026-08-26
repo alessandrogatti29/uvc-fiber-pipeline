@@ -55,8 +55,8 @@ run with matching landmark availability.
 | 3b | `05_repair_surface_defects.py` | *(optional)* Fixes near-duplicate-point defects from the cut |
 | 3c | `06_tetrahedralize_surface.py` | Builds a clean tet volume from the cut surfaces |
 | 3d | `03_optimize_mesh_quality.py` | Fixes tet element quality on the cut mesh |
-| 4 | `07_map_fibers_uvc.m` | UVC-based fiber transfer: template → cut patient mesh |
-| 5 | `08_transfer_fibers_cartesian.m` | Cartesian transfer: cut mesh → full patient mesh (with valves) |
+| 4 | `map_fibers_uvc.m` | UVC-based fiber transfer: template → cut patient mesh |
+| 5 | `transfer_fibers_cartesian.m` | Cartesian transfer: cut mesh → full patient mesh (with valves) |
 | 6 | `09_rule_based_ring_fibers.py` | Rule-based fiber fill for the valve-adjacent gap |
 | 7 | `10_export_msh_and_fibers.py` | Final export: Gmsh MSH 4.1 + per-element fiber `.txt` |
 
@@ -181,7 +181,7 @@ Once you have one patient's mesh with complete fibers everywhere
 the pipeline for the *next* patient: run CobivecoX on that
 already-complete mesh to get its UVC, run CobivecoX on the new patient's
 mesh the normal way, and map fibers between them directly via UVC (step
-4's script, `07_map_fibers_uvc.m`) in one shot — no cutting, no separate
+4's script, `map_fibers_uvc.m`) in one shot — no cutting, no separate
 rule-based valve step, since the valve regions transfer through the UVC
 correspondence automatically. The valve-region fibers you get this way
 are inherited from the *first* patient's rule-based approximation rather
