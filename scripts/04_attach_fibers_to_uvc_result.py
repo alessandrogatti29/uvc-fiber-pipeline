@@ -12,10 +12,14 @@ which is normally far denser than the mesh, so this is accurate even
 without needing the Cobiveco output to share exact point correspondence
 with the pre-optimization mesh.
 
+The fiber and sheet are the COLUMNS of dY_dMatl: fiber = column 0 (file
+columns 16, 19, 22), sheet = column 2 (file columns 18, 21, 24). See
+01_check_fiber_export.py. The normal is recomputed as fiber x sheet.
+
 Usage:
   python 04_attach_fibers_to_uvc_result.py \\
       --uvc-result result_template/result.vtu \\
-      --fibers fibers_all_fixed.txt \\
+      --fibers fibers_all_corrected.txt \\
       --output template_with_fibers.vtu
 """
 
@@ -28,7 +32,8 @@ from scipy.spatial import cKDTree
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--uvc-result", required=True, help="Cobiveco/CobivecoX result.vtu for the template")
-    p.add_argument("--fibers", required=True, help="Dense fiber sample cloud (fibers_all_fixed.txt)")
+    p.add_argument("--fibers", required=True,
+                   help="Dense fiber sample cloud: the Continuity export used in step 2a")
     p.add_argument("--output", required=True)
     args = p.parse_args()
 
@@ -39,8 +44,8 @@ def main():
     print("Loading dense fiber sample cloud...")
     data = np.loadtxt(args.fibers, skiprows=1)
     fiber_pts = data[:, 7:10]
-    fiber = data[:, 16:19]
-    sheet = data[:, 19:22]
+    fiber = data[:, [16, 19, 22]]  # column 0 of dY_dMatl
+    sheet = data[:, [18, 21, 24]]  # column 2 of dY_dMatl
     print(f"  {len(fiber_pts)} sample points")
 
     print("Nearest-neighbor matching mesh points to fiber samples...")

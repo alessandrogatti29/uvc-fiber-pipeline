@@ -47,7 +47,7 @@ run with matching landmark availability.
 
 | # | Script | What it does |
 |---|---|---|
-| 1 | `01_fix_fiber_handedness.py` | Fixes left-handed fiber frames in the raw template fiber export |
+| 1 | `01_check_fiber_export.py` | Checks the template fiber export (column layout, orthonormality, the constant-frame export bug); read-only |
 | 2a | `02_build_template_mesh.py` | Builds a solid template mesh from the fiber export, classifies endo_LV/endo_RV/epi/base |
 | 2b | `03_optimize_mesh_quality.py` | Fixes tet element quality (reused again in step 3) |
 | 2c | `04_attach_fibers_to_uvc_result.py` | Re-attaches fiber data onto the template's Cobiveco output |
@@ -68,6 +68,61 @@ landmarks, since the template has none); step 3 typically uses CobivecoX
 mesh — either works for the mapping in step 4, as long as it produces a
 `result.vtu` with `ab/rt/tm/tv` and an `R.mat` alignment matrix.
 
+## Fiber export format
+
+The template fibers come from a Continuity export with one row per sample
+point. Columns 7–9 hold the position `X`; columns 16–24 hold the 3×3
+matrix `dY_dMatl` row by row, so `dY_dMatl[i,j]` is in column `16 + 3*i + j`.
+
+**The basis vectors are the columns of `dY_dMatl`** (confirmed by the
+export's author):
+
+| Vector | `dY_dMatl` column | File columns (0-based) |
+|---|---|---|
+| fiber | 0 | 16, 19, 22 |
+| sheet-normal | 1 | 17, 20, 23 |
+| sheet | 2 | 18, 21, 24 |
+
+Steps 2a and 2c read the fiber and sheet columns and recompute the normal
+as fiber × sheet. Row 0 (file columns 16–18) is **not** the fiber, even
+though earlier versions of this repo read it as one. It holds the
+x-components of all three vectors.
+
+Our first template export (`fibers_all.txt`) had a Continuity export bug:
+one constant frame per element, so the fibers jumped by a median of about
+40° at element faces. The corrected export (`fibers_all_corrected.txt`)
+varies within elements, is continuous across faces and has
+`det(dY_dMatl) = +1` everywhere. Step 1 now checks for these problems. It
+used to rewrite "row 2" to fix handedness, which under the column
+convention reflects the vectors through the xy-plane. A fix is not needed
+anyway, because only the fiber and sheet are used.
+
+Two more details matter once the field is correct:
+
+- **Canonical frames.** Plain Cobiveco and CobivecoX can put the RV on
+  opposite sides of their aligned frames, about 180° apart around the long
+  axis. Vectors carried through `R.mat` alone then reverse their
+  circumferential component, which mirrors the helix (an LV going
+  +53° → −51° endo → epi on the template arrived as −55° → +47°).
+  `map_fibers_uvc.m` now rotates the source's anatomical axes
+  (apex→base, LV→RV, from `ab` and `tv`) onto the target's and prints the
+  angle. It should be small when the two canonical frames already agree;
+  for our template → Patient2cut transfer it was about 180°.
+- **Sign-aware averaging.** Fibers are axes, and the corrected field flips
+  f → −f between neighbouring samples in a few percent of places. Every
+  averaging step (`map_fibers_uvc.m`, `transfer_fibers_cartesian.m`,
+  `10_export_msh_and_fibers.py`) flips each contribution to agree with a
+  reference one before summing, so f and −f no longer cancel.
+
+### Switching to a new fiber export
+
+If the new export has the same geometry (`X` columns) as the old one, as
+`fibers_all_corrected.txt` does, the template mesh, the cut mesh and every
+Cobiveco result stay valid. Re-run only the fiber steps: 1, 2c, 4, 5, 6,
+and 7 with `--fibers-only`. That keeps the existing `.msh` and its element
+order, so renumbered meshes and element-tag files built from it remain
+valid. Then regenerate any copies of the fiber file made downstream.
+
 ## Prerequisites
 
 - Python 3 with `numpy`, `scipy`, `pyvista`, `tetgen`, `gmsh`
@@ -80,14 +135,13 @@ mesh — either works for the mapping in step 4, as long as it produces a
 ## Example end-to-end run
 
 ```bash
-# 1. Fix fiber handedness
-python 01_fix_fiber_handedness.py \
-    --input fibers_all.txt --output fibers_all_fixed.txt
+# 1. Check the fiber export (read-only; exits non-zero if it is unusable)
+python 01_check_fiber_export.py --fibers fibers_all_corrected.txt
 
 # 2a. Build template geometry (apex-element ranges are specific to our
 #     template -- see "Adapting to a different template" below)
 python 02_build_template_mesh.py \
-    --fibers fibers_all_fixed.txt --out-dir template_geometry \
+    --fibers fibers_all_corrected.txt --out-dir template_geometry \
     --apex-inner-elements 49 65 --apex-outer-elements 113 129
 
 # 2b. Fix its element quality
@@ -101,7 +155,7 @@ python 03_optimize_mesh_quality.py \
 
 # 2c. Re-attach fiber data (lost during quality optimization)
 python 04_attach_fibers_to_uvc_result.py \
-    --uvc-result result_template/result.vtu --fibers fibers_all_fixed.txt \
+    --uvc-result result_template/result.vtu --fibers fibers_all_corrected.txt \
     --output template_geometry/template_with_fibers.vtu
 
 # 3a. Cut the valve region off your patient mesh yourself (e.g. ParaView Clip),
@@ -144,6 +198,7 @@ python 09_rule_based_ring_fibers.py \
 python 10_export_msh_and_fibers.py \
     --input patient_fibers_complete.vtu \
     --out-msh patient_final.msh --out-fibers patient_final_fibers.txt
+#    (add --fibers-only and drop --out-msh when only the fibers changed)
 ```
 
 ## Adapting to a different template or patient
