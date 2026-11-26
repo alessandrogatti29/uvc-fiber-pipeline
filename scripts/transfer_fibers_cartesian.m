@@ -58,14 +58,32 @@ baryCoords(found,:) = cartesianToBarycentric(TR, baryCellIds(found), Q(found,:))
 baryPointIds = nan(size(Q,1), 4);
 baryPointIds(found,:) = C(baryCellIds(found),:);
 
+% Fibers are axes (f and -f are the same fiber): before blending, flip each
+% corner's vector to agree with the corner of largest barycentric weight,
+% so f and -f cannot cancel. Identical to the plain blend where signs agree.
 fiber_tgt = nan(size(Q,1), 3);
 sheet_tgt = nan(size(Q,1), 3);
-for k = 1:3
-    vals = source.pointData.fiber(:,k);
-    fiber_tgt(found,k) = sum(baryCoords(found,:) .* vals(baryPointIds(found,:)), 2);
-    vals = source.pointData.sheet(:,k);
-    sheet_tgt(found,k) = sum(baryCoords(found,:) .* vals(baryPointIds(found,:)), 2);
+fIdx = find(found);
+B = baryCoords(fIdx,:);
+I = baryPointIds(fIdx,:);
+[~, refCol] = max(B, [], 2);
+refNode = I(sub2ind(size(I), (1:numel(fIdx))', refCol));
+srcF = double(source.pointData.fiber);
+srcS = double(source.pointData.sheet);
+accF = zeros(numel(fIdx), 3); accS = zeros(numel(fIdx), 3);
+nFlipF = 0; nFlipS = 0;
+for c = 1:4
+    vF = srcF(I(:,c),:); vS = srcS(I(:,c),:);
+    sF = sign(sum(vF .* srcF(refNode,:), 2)); sF(sF == 0) = 1;
+    sS = sign(sum(vS .* srcS(refNode,:), 2)); sS(sS == 0) = 1;
+    nFlipF = nFlipF + sum(sF < 0); nFlipS = nFlipS + sum(sS < 0);
+    accF = accF + B(:,c) .* sF .* vF;
+    accS = accS + B(:,c) .* sS .* vS;
 end
+fiber_tgt(fIdx,:) = accF;
+sheet_tgt(fIdx,:) = accS;
+fprintf('  corner vectors sign-flipped before blending: fiber %.2f%%, sheet %.2f%%\n', ...
+    100*nFlipF/(4*numel(fIdx)), 100*nFlipS/(4*numel(fIdx)));
 
 disp('Re-orthonormalizing...');
 fiber_norm = sqrt(sum(fiber_tgt.^2,2));

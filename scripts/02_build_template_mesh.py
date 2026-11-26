@@ -26,7 +26,7 @@ such singularity, pass --no-apex-fix.
 
 Usage:
   python 02_build_template_mesh.py \\
-      --fibers fibers_all_fixed.txt \\
+      --fibers fibers_all_corrected.txt \\
       --out-dir template_geometry \\
       --grid-shape 10 50 50 \\
       --num-elements 128 \\
@@ -60,13 +60,20 @@ def build_hex_mesh(data, grid_shape, num_elements):
     for e in range(num_elements):
         block = data[e * ppe:(e + 1) * ppe]
         X = block[:, 7:10].reshape(n0, n1, n2, 3)
+        # dY[..., i, j] = dY_dMatl[i, j]. The basis vectors are the COLUMNS:
+        # column 0 = fiber, column 1 = sheet-normal, column 2 = sheet (see
+        # 01_check_fiber_export.py). The normal is recomputed as fiber x sheet,
+        # as every later step does, so the frame is right-handed whatever
+        # det(dY_dMatl) is.
         dY = block[:, 16:25].reshape(n0, n1, n2, 3, 3)
         idx = np.arange(n0 * n1 * n2).reshape(n0, n1, n2) + global_offset
 
+        f = dY[..., :, 0].reshape(-1, 3)
+        s = dY[..., :, 2].reshape(-1, 3)
         raw_points.append(X.reshape(-1, 3))
-        raw_fiber.append(dY[..., 0, :].reshape(-1, 3))
-        raw_sheet.append(dY[..., 1, :].reshape(-1, 3))
-        raw_normal.append(dY[..., 2, :].reshape(-1, 3))
+        raw_fiber.append(f)
+        raw_sheet.append(s)
+        raw_normal.append(np.cross(f, s))
         global_offset += n0 * n1 * n2
 
         for i in range(n0 - 1):
@@ -199,7 +206,7 @@ def write_ply(points, quads, out_path, cap_hint=None):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--fibers", required=True, help="Handedness-corrected fiber export (output of step 1)")
+    p.add_argument("--fibers", required=True, help="Continuity fiber export, checked with step 1 (e.g. fibers_all_corrected.txt)")
     p.add_argument("--out-dir", required=True, help="Output directory for the template mesh + surfaces")
     p.add_argument("--out-prefix", default="template", help="Filename prefix for outputs (default: template)")
     p.add_argument("--grid-shape", type=int, nargs=3, default=[10, 50, 50],
